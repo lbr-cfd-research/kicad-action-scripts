@@ -452,8 +452,8 @@ STEP         = '-'
             if poly_set is None:
                 poly_set = poly_set_layer
             else:
-                poly_set.BooleanIntersection(poly_set_layer, SHAPE_POLY_SET.PM_FAST)
-                poly_set.Simplify(SHAPE_POLY_SET.PM_FAST)
+                poly_set.BooleanIntersection(poly_set_layer)
+                poly_set.Simplify()
 
             if poly_set.OutlineCount() == 0:
                 wxPrint("No areas to fill")
