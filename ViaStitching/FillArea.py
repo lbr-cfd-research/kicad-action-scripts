@@ -33,6 +33,17 @@ import wx
 from inspect import currentframe, getframeinfo
 import time
 
+# Keep-Out Zone Support - Added for KiCad 9.0.x
+try:
+    from .keepout_checker import KeepOutChecker
+    KEEPOUT_AVAILABLE = True
+except ImportError:
+    try:
+        from keepout_checker import KeepOutChecker
+        KEEPOUT_AVAILABLE = True
+    except ImportError:
+        KEEPOUT_AVAILABLE = False
+        print("Warning: keepout_checker module not found - keep-out zones will be ignored")
 
 def wxPrint(msg):
     wx.LogMessage(msg)
@@ -501,6 +512,19 @@ STEP         = '-'
 
         VIA_GROUP_NAME = "ViaStitching {}".format(self.netname)
 
+        # === KEEP-OUT ZONE SUPPORT - Initialize checker ===
+        self.keepout_checker = None
+        if KEEPOUT_AVAILABLE:
+            try:
+                self.keepout_checker = KeepOutChecker(self.pcb, debug=self.debug)
+                zone_count = self.keepout_checker.get_zone_count()
+                if zone_count > 0:
+                    wxPrint("Keep-Out Zones: Found {} zone(s) - will be respected".format(zone_count))
+            except Exception as e:
+                wxPrint("Warning: Could not initialize keep-out checker: {}".format(e))
+                self.keepout_checker = None
+        # === END KEEP-OUT ZONE SUPPORT ===
+
         if self.debug:
             print("Enumerate groups")
         for i in self.pcb.Groups():
@@ -800,7 +824,18 @@ STEP         = '-'
                         ran_x = (random.random() * max_offset) - (max_offset / 2.0)
                         ran_y = (random.random() * max_offset) - (max_offset / 2.0)
 
-                    self.AddVia(VECTOR2I(int(via.PosX + ran_x), int(via.PosY + ran_y)), via.X, via.Y)
+                    # === KEEP-OUT ZONE CHECK ===
+                    via_position = VECTOR2I(int(via.PosX + ran_x), int(via.PosY + ran_y))
+                    
+                    # Check if via is allowed at this position
+                    if self.keepout_checker is not None:
+                        if not self.keepout_checker.is_via_allowed(via_position, self.size):
+                            if self.debug:
+                                print("Skipping via at ({}, {}) - in keep-out zone".format(via.X, via.Y))
+                            continue  # Skip this via - it's in a keep-out zone
+                    # === END KEEP-OUT ZONE CHECK ===
+
+                    self.AddVia(via_position, via.X, via.Y)
                     via_placed += 1
 
         if self.debug:
